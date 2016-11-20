@@ -1,60 +1,9 @@
 #! /usr/bin/perl -w
+# Toby Thurston -- 20 Nov 2016 
+# Command line interface to Bluepages
+
 use strict;
 use warnings;
-# Toby Thurston -- 16 Nov 2016 
-
-die <<"END_USAGE" unless @ARGV gt 0;
-  Usage: $0 [ options ] usual name [country code]
-
-  "usual name" is the normal way of writing the person's name.  Eg "toby thurston".
-  You can use UPPER or lower case.  If you are not sure how to spell the first name
-  just put the initial.  If you don't know the first name you can put "*".  If you
-  don't know the surname, then you can put the first few letters plus "*", but try not
-  to crash Blue Pages by asking for the entire world.  If the surname has several words
-  in it, you may need to use a "_" character instead of spaces in the surname.
-
-  Instead of the name you can also give just an email address or a phone number.
-  You can also put "usual name" in one of the following forms to search
-  other fields:  serialnumber  085682866
-                 emailaddress  thurston\@uk.ibm.com
-                 tieline 430071
-                 telephonenumber 020-7021-9073
-                 mobile 07798-897287
-
-  Most of these can include * for matching in the value field. There is no field for
-  Mobex numbers in BP but most people put them in the mobile field in (brackets) after
-  the main mobile number. Creative use of *s may help.
-
-  "country code" is "gb" or "us" or "fr" or "de" etc  (NB uk = Ukraine).
-
-  "options" are:
-   --force: makes $0 go to BP instead of showing any local cached version
-   --quiet: turns off any warning or information messages
-   --chain: shows the list of people to whom the person found reports
-   --peers: shows the list of people with the same manager
-   --global: modifies --chain and --peers to use "Global Team Leader" instead of "Manager"
-   --team:  shows the list of people reporting to the person found (if any(
-   --asst:  shows the full details for the person's assistant (if any)
-   --notes: shows just Notes addresses (and also in any chain or team)
-   --email: shows just Internet email addresses (& in any chain or team)
-   --svpic: saves a copy of the person's bluepages picture alongside the vcf (as well as putting it *in* the vcf)
-   --nopic: do not get the person's bluepages picture at all
-   --show "format" : for use in scripts, get a VCF card and show fields (implies quiet)
-   --bluepages: show person in Bluepages
-   --link  : put URL for person in Bluepages on clip board
-   --delete: remove local VCF file (with confirmation unless --quiet)
-
-  Any successful look up will also put the person's Notes address on the clip board. Although if you
-  have said "--email" it will be the external email address instead, and if you say "--card" it will
-  be a neat text representation of a business card.
-
-  You can only have one of --chain, --team, or --peers at the same time.
-  Similarly it's either --notes or --email.
-  If you specify --global without one of --chain or --peers, you just get an indication if 
-  there is a global team lead defined or not.
-
-  --show implies --quiet and cancels --phone, --chain, --team, and --peers
-END_USAGE
 
 # You need to install perl-ldap and Clipboard
 use Net::LDAP::Entry;
@@ -66,9 +15,216 @@ use 5.010;
 use LWP::Simple;
 use Time::HiRes qw( gettimeofday tv_interval );
 use Getopt::Long;
+use Pod::Usage;
 use Carp;
 use MIME::Base64;
 use Encode;
+
+our $VERSION = '2.7'; 
+
+=pod
+
+=head1 NAME
+
+pb.pl - Perl Bluepages: lookup people in the internal IBM directory.
+
+This program will only work if you have access to the IBM internal network.
+
+=head1 SYNOPSIS
+
+    perl pb.pl usual name [country_code] [options]
+
+=head1 ARGUMENTS and OPTIONS
+
+In the example above "usual name" is the normal way of writing the person's name: 
+
+    perl pb.pl toby thurston 
+
+You can use UPPER or lower case.  If you are not sure how to spell the first name
+just put the initial.  If you don't know the first name you can put "*", but you will
+probably have to escape it with a backslash to stop your shell expanding it.
+
+    perl pb.pl \* thurston
+
+If you don't know the surname, then you can put the first few letters plus "*", but try not
+to crash Blue Pages by asking for the entire world.  If the surname has several words
+in it, you may need to use a "_" character instead of spaces in the surname.
+
+    perl pb.pl Mark van_der_Pump
+
+Instead of a name you can also try just an email address or a phone number.
+Or you can use one of the following forms to search other fields:  
+
+    serialnumber  085682866
+    emailaddress  thurston\@uk.ibm.com
+    tieline 430071
+    telephonenumber 020-7021-9073
+    mobile 07798-897287
+
+Most of these can include * for matching in the value field. There is no field for
+Mobex numbers in BP but most people put them in the mobile field in (brackets) after
+the main mobile number. Creative use of *s may help.
+
+"country code" is "gb" or "us" or "fr" or "de" etc  
+Note that country code "uk" is for Ukraine; use "gb" for United Kingdom.
+
+=over 4 
+   
+=item --force
+
+go directly to BP instead of showing any local cached version
+
+=item --quiet
+
+turns off any warning or information messages
+
+=item --chain
+
+shows the list of people to whom the person found reports
+
+=item --peers
+
+shows the list of people with the same manager
+
+=item --global
+
+modifies --chain and --peers to use "Global Team Leader" instead of "Manager"
+
+=item --team
+
+shows the list of people reporting to the person found (if any)
+
+=item --asst
+
+shows the full details for the person's assistant (if any)
+
+=item --notes
+
+shows just Notes addresses (and also in any chain or team)
+
+=item --email
+
+shows just Internet email addresses (& in any chain or team)
+
+=item --svpic
+
+saves a copy of the person's bluepages picture alongside the vcf (as well as putting it *in* the vcf)
+
+=item --nopic
+
+do not get the person's bluepages picture at all
+
+=item --show "format" 
+
+for use in scripts, get a VCF card and show fields (implies quiet)
+
+=item --bluepages
+
+show person in Bluepages
+
+=item --link
+
+put URL for person in Bluepages on clip board
+
+=item --delete
+
+remove local VCF file (with confirmation unless --quiet)
+
+=item --usage, --help, --man
+
+Show increasing amounts of help text, and exit.
+
+=item --version
+
+Print version and exit.
+
+=back
+
+=head1 DESCRIPTION
+
+Any successful look up will also put the person's Notes address on the clip board. Although if you
+have said "--email" it will be the external email address instead, and if you say "--card" it will
+be a neat text representation of a business card.
+
+You can only have one of --chain, --team, or --peers at the same time.
+Similarly it's either --notes or --email.
+If you specify --global without one of --chain or --peers, you just get an indication if 
+there is a global team lead defined or not.
+
+--show implies --quiet and cancels --phone, --chain, --team, and --peers
+
+=head1 AUTHOR
+
+Toby Thurston -- 20 Nov 2016 
+
+=cut
+
+# Process the option switches
+my $Show_peers              = 0;
+my $Show_team               = 0;
+my $Show_assistant          = 0;
+my $Show_chain              = 0; my %Shown_in_chain=(); my $Chain_indent=0;
+my $Want_email              = 0;
+my $Want_notes              = 0;
+my $Want_card_on_clip       = 0;
+my $Want_short_card_on_clip = 0;
+my $Want_BP_link_on_clip    = 0;
+my $Add_to_clip             = 0;
+my $Save_picture            = 0;
+my $Skip_picture            = 0;
+my $Keep_quiet              = 0;
+my $Search_BP               = 0;
+my $Search_locally          = 1;
+my $Show_format             = '';
+my $Show_BP                 = 0;
+my $Kill_VCF                = 0;
+my $Dump_raw_data           = 0;
+my $World_wide_search       = 0;
+my $Use_gtl_for_manager     = 0;
+
+my $options_ok = GetOptions(
+    'show:s'  => \$Show_format,
+    add       => \$Add_to_clip,
+    asst      => \$Show_assistant,
+    bluepages => \$Show_BP,
+    card      => \$Want_card_on_clip,
+    chain     => \$Show_chain,
+    delete    => \$Kill_VCF,
+    dump      => \$Dump_raw_data,
+    email     => \$Want_email,
+    force     => \$Search_BP,
+    global    => \$Use_gtl_for_manager,
+    link      => \$Want_BP_link_on_clip,
+    nopic     => \$Skip_picture,
+    notes     => \$Want_notes,
+    peers     => \$Show_peers,
+    quiet     => \$Keep_quiet,
+    scard     => \$Want_short_card_on_clip,
+    svpic     => \$Save_picture,
+    team      => \$Show_team,
+    tree      => \$Show_team,
+    world     => \$World_wide_search,
+    
+    'version'     => sub { warn "$0, version: $VERSION\n"; exit 0; }, 
+    'usage'       => sub { pod2usage(-verbose => 0, -exitstatus => 0) },                         
+    'help'        => sub { pod2usage(-verbose => 1, -exitstatus => 0) },                         
+    'man'         => sub { pod2usage(-verbose => 2, -exitstatus => 0) },
+
+) or die pod2usage();
+die pod2usage unless @ARGV;
+
+$Show_team      = 0 if $Show_chain;
+$Show_team      = 0 if $Show_peers;
+$Show_chain     = 0 if $Show_peers;
+$Want_email     = 0 if $Want_notes;
+$Show_peers     = 0 if $Show_format;
+$Show_team      = 0 if $Show_format;
+$Show_assistant = 0 if $Show_format;
+$Show_chain     = 0 if $Show_format;
+$Keep_quiet     = 1 if $Show_format;
+$Search_locally = 0 if $Search_BP;
+$Search_locally = 0 if $Save_picture;
+$Kill_VCF       = 0 unless $Search_locally;
 
 # Some Globals
 my $Contacts_dir = get_home_path() . '/contacts/' ;
@@ -132,66 +288,6 @@ my $IBM_email_pattern = qr{ \A [-_.A-Za-z0-9]+\@([a-z][a-z])1?\.ibm\.com \Z }ix;
 my $IBM_notes_pattern = qr{ \A ([A-Za-z].*?)\/(.*?)\/(IBM|IDE)         \Z }ix;
 my $IBM_notes_long_pat= qr{ \A (\S.*?\/IBM)\@([A-Z]{5})  \Z }ix;
 my $canonical_pattern = qr{ \A CN= }ix;
-
-# Process the option switches
-my $Show_peers              = 0;
-my $Show_team               = 0;
-my $Show_assistant          = 0;
-my $Show_chain              = 0; my %Shown_in_chain=(); my $Chain_indent=0;
-my $Want_email              = 0;
-my $Want_notes              = 0;
-my $Want_card_on_clip       = 0;
-my $Want_short_card_on_clip = 0;
-my $Want_BP_link_on_clip    = 0;
-my $Add_to_clip             = 0;
-my $Save_picture            = 0;
-my $Skip_picture            = 0;
-my $Keep_quiet              = 0;
-my $Search_BP               = 0;
-my $Search_locally          = 1;
-my $Show_format             = '';
-my $Show_BP                 = 0;
-my $Kill_VCF                = 0;
-my $Dump_raw_data           = 0;
-my $World_wide_search       = 0;
-my $Use_gtl_for_manager     = 0;
-
-die "Cannot read options" unless GetOptions(
-    'show:s'  => \$Show_format,
-    add       => \$Add_to_clip,
-    asst      => \$Show_assistant,
-    bluepages => \$Show_BP,
-    card      => \$Want_card_on_clip,
-    chain     => \$Show_chain,
-    delete    => \$Kill_VCF,
-    dump      => \$Dump_raw_data,
-    email     => \$Want_email,
-    force     => \$Search_BP,
-    global    => \$Use_gtl_for_manager,
-    link      => \$Want_BP_link_on_clip,
-    nopic     => \$Skip_picture,
-    notes     => \$Want_notes,
-    peers     => \$Show_peers,
-    quiet     => \$Keep_quiet,
-    scard     => \$Want_short_card_on_clip,
-    svpic     => \$Save_picture,
-    team      => \$Show_team,
-    tree      => \$Show_team,
-    world     => \$World_wide_search,
-    );
-
-$Show_team      = 0 if $Show_chain;
-$Show_team      = 0 if $Show_peers;
-$Show_chain     = 0 if $Show_peers;
-$Want_email     = 0 if $Want_notes;
-$Show_peers     = 0 if $Show_format;
-$Show_team      = 0 if $Show_format;
-$Show_assistant = 0 if $Show_format;
-$Show_chain     = 0 if $Show_format;
-$Keep_quiet     = 1 if $Show_format;
-$Search_locally = 0 if $Search_BP;
-$Search_locally = 0 if $Save_picture;
-$Kill_VCF       = 0 unless $Search_locally;
 
 # Read the args (and play about with them)
 #
@@ -395,6 +491,7 @@ exit;
 
 sub find_person_in_local_files {
 
+    my $needle;
     my @local_vcfs;
     my $desired_ref = shift;
     my @bp_keys = sort keys %$desired_ref;
@@ -403,8 +500,13 @@ sub find_person_in_local_files {
                                          && $desired_ref->{givenname} ne '*';
         @local_vcfs = glob($Contacts_dir . make_vcf_name(@$desired_ref{qw(sn givenname c)}));
     }
+    elsif ( "@bp_keys" eq 'c emailaddress' ) {
+        $needle = $desired_ref->{emailaddress};
+        warn "Grepping local files for $needle . . . \n" unless $Keep_quiet;
+        @local_vcfs = `grep -il "$needle" ${Contacts_dir}*.vcf`;
+    }
     else {
-        my ($needle) = values %$desired_ref;
+        ($needle) = values %$desired_ref;  # this is likely to produce rubbish, first of random order of values...
         warn "Grepping local files for $needle . . . \n" unless $Keep_quiet;
         @local_vcfs = `grep -il "$needle" ${Contacts_dir}*.vcf`;
     }
