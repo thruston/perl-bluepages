@@ -1,34 +1,38 @@
 # perl-bluepages
 A command-line interface to the IBM (internal) BluePages directory based on perl-ldap.
 
-** If you do not have (a) access to the IBM internal network and (b) permission to use it, 
-then you will not be able to use this program. **
+**If you do not have (a) access to the IBM internal network and (b) permission to use it, 
+then you will not be able to use this program.**
 
 Pre-requisites
+--------------
 
-   perl 5.10 or later
-   cpanm install perl-ldap
-   cpanm install Clipboard
-
-   access to the IBM internal network
+- access to the IBM internal network
+- perl 5.10 or later
+- cpanm install perl-ldap
+- cpanm install Clipboard
 
 Installation
+------------
 
-    - git clone https://github.com/thruston/perl-bluepages
+Try
 
-    - then add something like this to your .bashrc
+    git clone https://github.com/thruston/perl-bluepages
 
-          alias pb="perl ~/perl-bluepages/pb.pl"
+then add something like this to your .bashrc
 
-    - and create a local contacts directory
+    alias pb="perl ~/perl-bluepages/pb.pl"
 
-          mkdir ~/contacts
+and create a local contacts directory
 
-    - adapt as appropriate for Windows
+    mkdir ~/contacts
+
+Adapt as appropriate for Windows.
 
 Usage
+-----
 
-   pb --help
+    pb --help
 
 This program does command-line look up to bluepages with a local cache.
 Each person found in bluepages is stored in a local VCF file (one each)
