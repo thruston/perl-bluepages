@@ -1,14 +1,15 @@
 #! /usr/bin/perl -w
-# Toby Thurston -- 20 Nov 2016 
+# Toby Thurston -- 21 Nov 2016 
 # Command line interface to Bluepages
 
 use strict;
 use warnings;
 
-# You need to install perl-ldap and Clipboard
+# You need to install perl-ldap, Clipboard, and Browser::Open
 use Net::LDAP::Entry;
 use Net::LDAP;
 use Clipboard;
+use Browser::Open qw(open_browser);
 
 # These are all standard with perl 5.10
 use 5.010;
@@ -20,7 +21,7 @@ use Carp;
 use MIME::Base64;
 use Encode;
 
-our $VERSION = '2.7'; 
+our $VERSION = '2.71'; 
 
 =pod
 
@@ -41,42 +42,18 @@ In the example above "usual name" is the normal way of writing the person's name
     perl pb.pl toby thurston 
 
 You can use UPPER or lower case.  If you are not sure how to spell the first name
-just put the initial.  If you don't know the first name you can put "*", but you will
-probably have to escape it with a backslash to stop your shell expanding it.
+just put the initial.  
 
-    perl pb.pl \* thurston
-
-If you don't know the surname, then you can put the first few letters plus "*", but try not
-to crash Blue Pages by asking for the entire world.  If the surname has several words
-in it, you may need to use a "_" character instead of spaces in the surname.
-
-    perl pb.pl Mark van_der_Pump
-
-Instead of a name you can also try just an email address or a phone number.
-Or you can use one of the following forms to search other fields:  
-
-    serialnumber  085682866
-    emailaddress  thurston\@uk.ibm.com
-    tieline 430071
-    telephonenumber 020-7021-9073
-    mobile 07798-897287
-
-Most of these can include * for matching in the value field. There is no field for
-Mobex numbers in BP but most people put them in the mobile field in (brackets) after
-the main mobile number. Creative use of *s may help.
 
 "country code" is "gb" or "us" or "fr" or "de" etc  
 Note that country code "uk" is for Ukraine; use "gb" for United Kingdom.
+If you leave it out, it will default to your local country.
 
 =over 4 
-   
-=item --force
 
-go directly to BP instead of showing any local cached version
+=item --usage, --help, --man
 
-=item --quiet
-
-turns off any warning or information messages
+Show increasing amounts of help text, and exit.
 
 =item --chain
 
@@ -98,6 +75,48 @@ shows the list of people reporting to the person found (if any)
 
 shows the full details for the person's assistant (if any)
 
+=item --bluepages
+
+open a browser window to show the person in Bluepages
+
+=back
+
+=head1 DESCRIPTION
+
+The main arguments can be extended in a variety of ways.
+Instead of a name you can also try just an email address or a phone number.
+Or you can use one of the following forms to search other fields:  
+
+    serialnumber  085682866
+    emailaddress  thurston\@uk.ibm.com
+    tieline 430071
+    telephonenumber 020-7021-9073
+    mobile 07798-897287
+
+Most of these can include * for matching in the value field. There is no field for
+Mobex numbers in BP but most people put them in the mobile field in (brackets) after
+the main mobile number. Creative use of *s may help, but you will
+probably have to escape it with a backslash to stop your shell expanding them.
+
+You can also use *s for all or part of the given name and surname, but try not
+to crash Blue Pages by asking for the entire world.  If the surname has several words
+in it, you may need to use a "_" character instead of spaces in the surname.
+
+    perl pb.pl Mark van_der_Pump
+
+In addition to the basic options described above, you can further modify behaviour 
+with these switches:
+
+=over 4
+
+=item --force
+
+go directly to BP instead of showing any local cached version
+
+=item --quiet
+
+turns off any warning or information messages
+
 =item --notes
 
 shows just Notes addresses (and also in any chain or team)
@@ -108,7 +127,7 @@ shows just Internet email addresses (& in any chain or team)
 
 =item --svpic
 
-saves a copy of the person's bluepages picture alongside the vcf (as well as putting it *in* the vcf)
+saves a copy of the person's bluepages picture as a .jpg alongside the vcf (as well as putting it *in* the vcf)
 
 =item --nopic
 
@@ -118,29 +137,23 @@ do not get the person's bluepages picture at all
 
 for use in scripts, get a VCF card and show fields (implies quiet)
 
-=item --bluepages
-
-show person in Bluepages
-
 =item --link
 
 put URL for person in Bluepages on clip board
 
+=item --card
+
+put the whole VCF card on the clip board
+
 =item --delete
 
 remove local VCF file (with confirmation unless --quiet)
-
-=item --usage, --help, --man
-
-Show increasing amounts of help text, and exit.
 
 =item --version
 
 Print version and exit.
 
 =back
-
-=head1 DESCRIPTION
 
 Any successful look up will also put the person's Notes address on the clip board. Although if you
 have said "--email" it will be the external email address instead, and if you say "--card" it will
@@ -222,8 +235,7 @@ $Show_team      = 0 if $Show_format;
 $Show_assistant = 0 if $Show_format;
 $Show_chain     = 0 if $Show_format;
 $Keep_quiet     = 1 if $Show_format;
-$Search_locally = 0 if $Search_BP;
-$Search_locally = 0 if $Save_picture;
+$Search_locally = 0 if ($Search_BP || $Save_picture || $Dump_raw_data);
 $Kill_VCF       = 0 unless $Search_locally;
 
 # Some Globals
@@ -236,7 +248,7 @@ my %VCF_key_for  = (
     asfilter=> 'X-ASFILTER',
     country => 'X-COUNTRY',
     manager => 'X-MANAGER',
-    glTeamLead => 'X-GLTEAMLEAD',
+    gtl     => 'X-GLTEAMLEAD',
     manflag => 'X-ISMANAGER',
     notes   => 'EMAIL;NOTES',
     telwk   => 'TEL;WORK',
@@ -418,21 +430,19 @@ warn sprintf "Time: %d ms\n", int(0.5+1000*tv_interval($search_start_time)) unle
 # Display some results
 print get_person_lines($p) unless $Show_format;
 
-if ( $Show_chain ) {
-    die "No manager defined\n" unless $p->{manager};
+if ( $Show_chain || $Show_peers ) {
+    my $boss_field = $Use_gtl_for_manager ? 'gtl' : 'manager';
+    
+    die "No $boss_field defined\n" unless $p->{$boss_field};
 
     my $ldap = Net::LDAP->new('bluepages.ibm.com') or die "Not on IBM network ---> $@\n";
     $ldap->bind;
-    show_chain($ldap, $p->{manager});
-    $ldap->unbind;
-}
-
-if ( $Show_peers ) {
-    die "No manager defined\n" unless $p->{manager};
-
-    my $ldap = Net::LDAP->new('bluepages.ibm.com') or die "Not on IBM network ---> $@\n";
-    $ldap->bind;
-    show_team($ldap, $p->{manager});
+    if ( $Show_chain ) {
+        show_chain($ldap, $p->{$boss_field});
+    }
+    else {
+        show_team($ldap, $p->{$boss_field});
+    }
     $ldap->unbind;
 }
 
@@ -475,10 +485,9 @@ else {
 }
 
 # Show in BP if wanted
-my $url = 'http://w3.ibm.com/bluepages/searchByName.wss?uid=' . $p->{serial} . '&task=viewrecord';
+my $url = 'http://w3.ibm.com/newbp/profile.html?uid=' . $p->{serial};
 if ( $Show_BP ) {
-    my $command = $^O eq 'MSWin32' ? 'start "Blue Pages"' : 'open';
-    system $command . ' "' . $url . '"';
+    open_browser($url);
 }
 if ( $Want_BP_link_on_clip ) {
     Clipboard->copy($url);
@@ -640,6 +649,7 @@ sub find_person_in_bluepages {
     my $adr     = gkv($e,'internalmaildrop').' '.gkv($e,'locationcity');
     my $vcfname = make_vcf_name($names[0], $names[1], gkv($e,'c'));
     my $manager = gkv($e,'manager');
+    my $gtl     = gkv($e,'glTeamLead');
     my $manflag = 'Y' eq gkv($e,'ismanager')?1:0;
     my $country = gkv($e,'c');
     my $asfilter= gkv($e,'secretary');
@@ -682,6 +692,7 @@ sub find_person_in_bluepages {
         adr     => $adr      ,
         vcfname => $vcfname  ,
         manager => $manager  ,
+        gtl     => $gtl      , 
         manflag => $manflag  ,
         country => $country  ,
         asst    => $asst     ,

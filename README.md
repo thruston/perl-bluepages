@@ -9,8 +9,9 @@ Pre-requisites
 
 - access to the IBM internal network
 - perl 5.10 or later
-- cpanm install perl-ldap
-- cpanm install Clipboard
+- cpanm perl-ldap
+- cpanm Clipboard
+- cpanm Browser::Open
 
 Installation
 ------------
