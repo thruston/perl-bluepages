@@ -9,9 +9,12 @@ Pre-requisites
 
 - access to the IBM internal network
 - perl 5.10 or later
-- cpanm perl-ldap
+- cpanm Bundle::Net::LDAP
 - cpanm Clipboard
 - cpanm Browser::Open
+
+On macos you need the Command Line Developer Tools installed.  Calling "git" for the first time 
+should automatically install them. 
 
 Installation
 ------------
