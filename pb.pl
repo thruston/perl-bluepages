@@ -21,7 +21,7 @@ use Carp;
 use MIME::Base64;
 use Encode;
 
-our $VERSION = '2.71'; 
+our $VERSION = '2.718'; 
 
 =pod
 
@@ -44,8 +44,7 @@ In the example above "usual name" is the normal way of writing the person's name
 You can use UPPER or lower case.  If you are not sure how to spell the first name
 just put the initial.  
 
-
-"country code" is "gb" or "us" or "fr" or "de" etc  
+"country code" is "gb" or "us" or "fr" or "de" etc.
 Note that country code "uk" is for Ukraine; use "gb" for United Kingdom.
 If you leave it out, it will default to your local country.
 
@@ -133,6 +132,10 @@ saves a copy of the person's bluepages picture as a .jpg alongside the vcf (as w
 
 do not get the person's bluepages picture at all
 
+=item --mailfile
+
+show details of Notes mail file and server
+
 =item --show "format" 
 
 for use in scripts, get a VCF card and show fields (implies quiet)
@@ -194,6 +197,7 @@ my $Kill_VCF                = 0;
 my $Dump_raw_data           = 0;
 my $World_wide_search       = 0;
 my $Use_gtl_for_manager     = 0;
+my $Get_mail_file_info      = 0;
 
 my $options_ok = GetOptions(
     'show:s'  => \$Show_format,
@@ -217,6 +221,7 @@ my $options_ok = GetOptions(
     team      => \$Show_team,
     tree      => \$Show_team,
     world     => \$World_wide_search,
+    mailfile  => \$Get_mail_file_info,
     
     'version'     => sub { warn "$0, version: $VERSION\n"; exit 0; }, 
     'usage'       => sub { pod2usage(-verbose => 0, -exitstatus => 0) },                         
@@ -235,7 +240,7 @@ $Show_team      = 0 if $Show_format;
 $Show_assistant = 0 if $Show_format;
 $Show_chain     = 0 if $Show_format;
 $Keep_quiet     = 1 if $Show_format;
-$Search_locally = 0 if ($Search_BP || $Save_picture || $Dump_raw_data);
+$Search_locally = 0 if ($Search_BP || $Save_picture || $Dump_raw_data || $Get_mail_file_info);
 $Kill_VCF       = 0 unless $Search_locally;
 
 # Some Globals
@@ -278,6 +283,8 @@ my @Useful_BP_Fields = qw(
     sn
     telephonenumber
     tieline
+    notesMailFile
+    notesMailServer
 );
 
 my %Full_Field_Name_for = (
@@ -412,7 +419,6 @@ if ( ! defined $p ) {
         exit;
     }
 
-
     # search BP with it
     $p = find_person_in_bluepages($f);
     $need_to_save_vcf++;
@@ -429,6 +435,10 @@ warn sprintf "Time: %d ms\n", int(0.5+1000*tv_interval($search_start_time)) unle
 
 # Display some results
 print get_person_lines($p) unless $Show_format;
+
+if ( $Get_mail_file_info ) {
+    print "\nMailfile path --> " . $p->{mailfile} . "\n";
+}
 
 if ( $Show_chain || $Show_peers ) {
     my $boss_field = $Use_gtl_for_manager ? 'gtl' : 'manager';
@@ -529,7 +539,7 @@ sub find_person_in_local_files {
         for (@local_vcfs) {
             printf "%2d. %s\n", $i++, $_;
         }
-        print "Please chose one of these people.\n";
+        print "Enter a number to choose one of the above.  Enter anything else to search on-line.\n";
         $choice = <STDIN>;
         return unless $choice =~ /\A\d+\Z/ && $choice < $i;
     }
@@ -590,7 +600,7 @@ sub find_person_in_bluepages {
         for (@entries) {
             printf "%2d. %s\n", $i++, $short_id_for{$_};
         }
-        print "Please chose one of these people.\n";
+        print "Enter a number to choose one of these people.  Enter anything else to quit\n";
         $choice = <STDIN>;
         die "Quit\n" unless $choice =~ /\A\d+\Z/ && $choice < $i;
     }
@@ -625,13 +635,12 @@ sub find_person_in_bluepages {
             $mobex = $2;
     }
     else {
-      warn "No MOBEX in mobile number >>>>>>>>> $mobile\n" if $mobile && !$Keep_quiet;
+        # warn "No MOBEX in mobile number >>>>>>>>> $mobile\n" if $mobile && !$Keep_quiet;
     }
 
     if ( $mobex && $mobex !~ /\A37/) {
         $mobex = '37'.$mobex
     }
-
 
     my @names = get_names_from_ldap_entry($e);
     my $n       = join ';', @names;
@@ -654,6 +663,7 @@ sub find_person_in_bluepages {
     my $country = gkv($e,'c');
     my $asfilter= gkv($e,'secretary');
     my $asst    = 'None';
+    my $mailfile = gkv($e, 'notesMailFile') . ' on ' . gkv($e, 'notesMailServer') ;
 
     if ( $asfilter ) {
         $asfilter =~ s/,ou=bluepages,o=ibm.com\Z//;
@@ -697,6 +707,7 @@ sub find_person_in_bluepages {
         country => $country  ,
         asst    => $asst     ,
         asfilter=> $asfilter ,
+        mailfile=> $mailfile ,
     };
 }
 
