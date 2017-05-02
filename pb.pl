@@ -1,5 +1,5 @@
 #! /usr/bin/perl -w
-# Toby Thurston -- 21 Nov 2016 
+# Toby Thurston -- 02 May 2017 
 # Command line interface to Bluepages
 
 use strict;
@@ -21,7 +21,7 @@ use Carp;
 use MIME::Base64;
 use Encode;
 
-our $VERSION = '2.718'; 
+our $VERSION = '2.7181'; 
 
 =pod
 
@@ -77,6 +77,10 @@ shows the full details for the person's assistant (if any)
 =item --bluepages
 
 open a browser window to show the person in Bluepages
+
+=item --open 
+
+open the VCF file locally (this will import it into Contacts on macOS).
 
 =back
 
@@ -171,7 +175,7 @@ there is a global team lead defined or not.
 
 =head1 AUTHOR
 
-Toby Thurston -- 20 Nov 2016 
+Toby Thurston -- 02 May 2017 
 
 =cut
 
@@ -198,6 +202,7 @@ my $Dump_raw_data           = 0;
 my $World_wide_search       = 0;
 my $Use_gtl_for_manager     = 0;
 my $Get_mail_file_info      = 0;
+my $Open_VCF_file           = 0;
 
 my $options_ok = GetOptions(
     'show:s'  => \$Show_format,
@@ -222,6 +227,7 @@ my $options_ok = GetOptions(
     tree      => \$Show_team,
     world     => \$World_wide_search,
     mailfile  => \$Get_mail_file_info,
+    open      => \$Open_VCF_file,
     
     'version'     => sub { warn "$0, version: $VERSION\n"; exit 0; }, 
     'usage'       => sub { pod2usage(-verbose => 0, -exitstatus => 0) },                         
@@ -495,14 +501,16 @@ else {
 }
 
 # Show in BP if wanted
-my $url = 'http://w3.ibm.com/newbp/profile.html?uid=' . $p->{serial};
+my $url = 'http://w3.ibm.com/bluepages/profile.html?uid=' . $p->{serial};
 if ( $Show_BP ) {
     open_browser($url);
 }
 if ( $Want_BP_link_on_clip ) {
     Clipboard->copy($url);
 }
-
+if ( $Open_VCF_file ) {
+    system $^O eq "MSWin32" ? "start" : "open", $Local_vcf_name;
+}
 exit;
 #****************************************************************************
 #* End of main line                                                         *
