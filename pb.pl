@@ -800,24 +800,28 @@ sub create_vcf_lines_from {
 
     if ( ! $Skip_picture ) {
         my $serial = $p->{serial};
-        my $pic = get("http://w3.ibm.com/bluepages/photo/ImageServlet.wss/$serial.jpg?cnum=$serial");
-        if ( defined $pic && substr($pic,0,5) ne 'GIF89' ) {  # don't store "Missing.gif"
-
-            $pic =~ s/\x00*\Z//; # no trailing nulls thank you Bluepages
-
-            if ( $Save_picture ) {
-                open my $jpg_handle, '>', "$serial.jpg";
-                binmode $jpg_handle;
-                print $jpg_handle $pic;
-                close $jpg_handle;
+        #my $url = "http://w3.ibm.com/bluepages/photo/ImageServlet.wss/$serial.jpg?cnum=$serial";
+        my $url = "http://w3-services1.w3-969.ibm.com/myw3/unified-profile-photo/v1/image/$serial";
+        my $pic = get($url);
+        if ( defined $pic ) {
+            if ( substr($pic,0,5) ne 'GIF89' ) {  # don't store "Missing.gif"
+                $pic =~ s/\x00*\Z//; # no trailing nulls thank you Bluepages
+                if ( $Save_picture ) {
+                    open my $jpg_handle, '>', "$serial.jpg";
+                    binmode $jpg_handle;
+                    print $jpg_handle $pic;
+                    close $jpg_handle;
+                }
+                $pic = 'PHOTO;ENCODING=BASE64;TYPE=JPEG:'.encode_base64($pic,'');
+                while ( length($pic) > 76 ) {
+                    push @out, substr($pic,0,76), "\n  "; # <--- NB spaces at start of next line...
+                    $pic = substr($pic,76);
+                }
+                push @out, "$pic\n" if $pic;
             }
-
-            $pic = 'PHOTO;ENCODING=BASE64;TYPE=JPEG:'.encode_base64($pic,'');
-            while ( length($pic) > 76 ) {
-                push @out, substr($pic,0,76), "\n  "; # <--- NB spaces at start of next line...
-                $pic = substr($pic,76);
-            }
-            push @out, "$pic\n" if $pic;
+        }
+        else {
+            warn "No pic found at $url"
         }
     }
 
