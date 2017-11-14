@@ -1,5 +1,5 @@
 #! /usr/bin/perl -w
-# Toby Thurston -- 02 May 2017 
+# Toby Thurston -- 02 Jun 2017 
 # Command line interface to Bluepages
 
 use strict;
@@ -69,6 +69,11 @@ modifies --chain and --peers to use "Global Team Leader" instead of "Manager"
 =item --team
 
 shows the list of people reporting to the person found (if any)
+
+=item --tree
+
+shows the list of people reporting to the person found (if any), and to any 
+managers in that persons team, and so on down
 
 =item --asst
 
@@ -175,13 +180,14 @@ there is a global team lead defined or not.
 
 =head1 AUTHOR
 
-Toby Thurston -- 02 May 2017 
+Toby Thurston -- 02 Jun 2017 
 
 =cut
 
 # Process the option switches
 my $Show_peers              = 0;
 my $Show_team               = 0;
+my $Show_tree               = 0;
 my $Show_assistant          = 0;
 my $Show_chain              = 0; my %Shown_in_chain=(); my $Chain_indent=0;
 my $Want_email              = 0;
@@ -224,7 +230,7 @@ my $options_ok = GetOptions(
     scard     => \$Want_short_card_on_clip,
     svpic     => \$Save_picture,
     team      => \$Show_team,
-    tree      => \$Show_team,
+    tree      => \$Show_tree,
     world     => \$World_wide_search,
     mailfile  => \$Get_mail_file_info,
     open      => \$Open_VCF_file,
@@ -403,6 +409,9 @@ my $search_start_time = [ gettimeofday ];
 
 if ( $Search_locally ) {
     $p = find_person_in_local_files(\%desiderata);
+    if ( ! defined $p) {
+        warn "No local file found...\n" unless $Keep_quiet;
+    }
 }
 
 if ( ! defined $p ) {
@@ -418,7 +427,7 @@ if ( ! defined $p ) {
         $f .= "($k=$v)";
     }
     $f .= ')';
-    warn "Looking for $f\n" unless $Keep_quiet;
+    warn "Searching Blue Pages for $f\n" unless $Keep_quiet;
 
     if ( $Dump_raw_data ) {
         show_all_data_for_filter_in_bluepages($f);
@@ -457,17 +466,17 @@ if ( $Show_chain || $Show_peers ) {
         show_chain($ldap, $p->{$boss_field});
     }
     else {
-        show_team($ldap, $p->{$boss_field});
+        show_team($ldap, $p->{$boss_field}, 0);
     }
     $ldap->unbind;
 }
 
-if ( $Show_team ) {
+if ( $Show_team || $Show_tree ) {
     die "Not a manager\n" unless $p->{manflag};
 
     my $ldap = Net::LDAP->new('bluepages.ibm.com') or die "Not on IBM network ---> $@\n";
     $ldap->bind;
-    show_team($ldap, $p);
+    show_team($ldap, $p, $Show_tree ? 1 : 0);
     $ldap->unbind;
 }
 
@@ -887,6 +896,9 @@ sub show_chain {
 sub show_team {
     my $ldap = shift;
     my $p = shift;
+    my $tree_level = shift;
+
+    my $prefix = $tree_level ? '  ' x $tree_level : '  ';
 
     if ( ref $p ne 'HASH' ) { # if $p is not a hash ref then it should be a BP attrib list...
         $p = find_person_in_bluepages(attrib_list_to_ldap_filter($p));
@@ -901,7 +913,11 @@ sub show_team {
                                  filter => "(&(c=$cc)(managercountrycode=$country)(managerserialnumber=$serial))" );
 
     $query->code && die $query->error;
-    $query->entries || die "No employees found for $serial in $country\n";
+
+    if ( ! $query->entries ) {
+        print $prefix . "No employees found for $serial in $country\n";
+        return
+    }
 
     my $r = $query->as_struct;
     for (sort { $r->{$a}->{callupname}[0] cmp $r->{$b}->{callupname}[0] } keys %{$r} ) {
@@ -918,13 +934,18 @@ sub show_team {
             print ",\n$address";
         } else {
             my $who = $address || $e->{callupname}->[0];
-            print '  ',
+            print $prefix,
             $e->{div}->[0] || '?' ,'/',
             $e->{dept}->[0],'|',
             $who,
             $e->{jobresponsibilities} ? ', ('.$e->{jobresponsibilities}->[0].')' : '',
             $e->{ismanager}->[0] eq 'Y' ? ' *' : '',
             "\n";
+        }
+        if ( $tree_level > 0 && $e->{ismanager}->[0] eq 'Y' ) {
+            $e->{country} = $e->{c}->[0];
+            $e->{serial} = $e->{serialnumber}[0];
+            show_team($ldap, $e, $tree_level + 1);
         }
     }
     return;
