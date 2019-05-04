@@ -1,5 +1,5 @@
 #! /usr/bin/perl -w
-# Toby Thurston -- 02 Jun 2017 
+# Toby Thurston -- 14 Nov 2017 
 # Command line interface to Bluepages
 
 use strict;
@@ -21,7 +21,7 @@ use Carp;
 use MIME::Base64;
 use Encode;
 
-our $VERSION = '2.7181'; 
+our $VERSION = '2.7182'; 
 
 =pod
 
@@ -180,7 +180,7 @@ there is a global team lead defined or not.
 
 =head1 AUTHOR
 
-Toby Thurston -- 02 Jun 2017 
+Toby Thurston -- 14 Nov 2017
 
 =cut
 
