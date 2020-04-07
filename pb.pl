@@ -920,12 +920,11 @@ sub show_team {
     }
 
     my $r = $query->as_struct;
-    for (sort { $r->{$a}->{callupname}[0] cmp $r->{$b}->{callupname}[0] } keys %{$r} ) {
+    for (sort { uc($r->{$a}->{callupname}[0]) cmp uc($r->{$b}->{callupname}[0]) } keys %{$r} ) {
 
         my $e = $r->{$_};
 
-        my $address = $Want_email ? $e->{emailaddress}->[0]
-                                  : format_notes_address($e->{notesemail}->[0]) ;
+        my $address = $e->{emailaddress}->[0];
 
         if ( $Want_notes || $Want_email ) {
             next unless $address;
@@ -933,7 +932,7 @@ sub show_team {
             Clipboard->copy("$s, $address"); # append managers email address to Clip
             print ",\n$address";
         } else {
-            my $who = $address || $e->{callupname}->[0];
+            my $who = $e->{callupname}->[0] . ", " . ($address || "[No email]");
             print $prefix,
             $e->{div}->[0] || '?' ,'/',
             $e->{dept}->[0],'|',
