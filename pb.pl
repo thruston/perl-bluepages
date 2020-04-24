@@ -1,5 +1,5 @@
 #! /usr/bin/perl -w
-# Toby Thurston -- 14 Nov 2017 
+# Toby Thurston -- 24 Apr 2020
 # Command line interface to Bluepages
 
 use strict;
@@ -21,7 +21,7 @@ use Carp;
 use MIME::Base64;
 use Encode;
 
-our $VERSION = '2.7182'; 
+our $VERSION = '2.71828'; 
 
 =pod
 
@@ -180,7 +180,7 @@ there is a global team lead defined or not.
 
 =head1 AUTHOR
 
-Toby Thurston -- 14 Nov 2017
+Toby Thurston -- 24 Apr 2020
 
 =cut
 
@@ -284,6 +284,7 @@ my @Useful_BP_Fields = qw(
     givenname
     glTeamLead
     internalmaildrop
+    iptelephonenumber
     ismanager
     jobresponsibilities
     locationcity
@@ -294,14 +295,13 @@ my @Useful_BP_Fields = qw(
     serialnumber
     sn
     telephonenumber
-    tieline
     notesMailFile
     notesMailServer
 );
 
 my %Full_Field_Name_for = (
     job   => 'jobresponsibilities',
-    tie   => 'tieline',
+    ipt   => 'iptelephonenumber',
     phone => 'telephonenumber',
     tel   => 'telephonenumber',
     mob   => 'mobile',
@@ -623,42 +623,6 @@ sub find_person_in_bluepages {
     }
 
     my $e = $entries[$choice];
-    # attempt to extract a mobex number out of the mobile field
-    my ($mobile,$mobex);
-    $mobile = gkv($e,'mobile');
-    # warn "Raw mobile field: $mobile\n" unless $Keep_quiet;
-
-    if ( $mobile =~ /\A(.+?\S)\s*\(.*?(2[67]\-?\d\d\d\d)\s*\)\Z/io ) {
-        $mobile = $1;
-        $mobile =~ s/mobex//io;
-        $mobex  = $2;
-        $mobex  =~ s/-//o;
-    }
-    elsif ( $mobile =~ /\A(.+?)MO?B?E?X.*?(2[67]\d\d\d\d)/io ) {
-        $mobile = $1;
-        $mobex = $2;
-    }
-    elsif ( $mobile =~ /7967\-?(27\d\d\d\d)/io ) {
-        $mobex  = $1;
-    }
-    elsif ( $mobile =~ /\A(.+?\S)\s*\(\s*(\d\d\d\d\d\d)\s*\)\Z/io ) {
-        $mobile = $1;
-        $mobile =~ s/mobex//io;
-        $mobex  = $2;
-    }
-    # 44-(0)7725-829925,  x37278984
-    elsif ( $mobile =~ /\A(.+?\S)\s+.*?(3727\d\d\d\d)/io ) {
-            $mobile = $1;
-            $mobex = $2;
-    }
-    else {
-        # warn "No MOBEX in mobile number >>>>>>>>> $mobile\n" if $mobile && !$Keep_quiet;
-    }
-
-    if ( $mobex && $mobex !~ /\A37/) {
-        $mobex = '37'.$mobex
-    }
-
     my @names = get_names_from_ldap_entry($e);
     my $n       = join ';', @names;
     my $fn      = $names[1].' '.$names[0];
@@ -667,11 +631,11 @@ sub find_person_in_bluepages {
     my $dept    = gkv($e,'dept');
     my $title   = gkv($e,'jobresponsibilities');
     my $email   = gkv($e,'emailaddress');
-    my $notes   = format_notes_address(gkv($e,'notesemail'));
-    my $telwk   = format_phone_number(gkv($e,'telephonenumber'));
-    my $telmb   = format_phone_number($mobile);
+    my $notes   = format_notes_address(gkv($e, 'notesemail'));
+    my $telwk   = format_phone_number(gkv($e, 'telephonenumber'));
+    my $telmb   = format_phone_number(gkv($e, 'mobile'));
     my $telti   = format_ibm_phone_number(gkv($e,'tieline'));
-    my $telmx   = format_ibm_phone_number($mobex);
+    my $telmx   = format_ibm_phone_number(gkv($e, 'iptelephonenumber'));
     my $adr     = gkv($e,'internalmaildrop').' '.gkv($e,'locationcity');
     my $vcfname = make_vcf_name($names[0], $names[1], gkv($e,'c'));
     my $manager = gkv($e,'manager');
